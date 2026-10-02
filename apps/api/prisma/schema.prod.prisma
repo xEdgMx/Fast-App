@@ -1,0 +1,156 @@
+// Esquema de PRODUCCIÓN (PostgreSQL / Neon). Es una copia de schema.prisma
+// con el datasource en postgresql. El local sigue usando schema.prisma (SQLite).
+// Si cambias un modelo, actualiza AMBOS archivos.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String?  @unique
+  name         String
+  role         String   @default("CLIENTE")
+  passwordHash String
+  kycStatus    String   @default("PENDING")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wallet         Wallet?
+  ordersAsClient Order[]       @relation("ClientOrders")
+  ordersAsDriver Order[]       @relation("DriverOrders")
+  messages       ChatMessage[]
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  entries LedgerEntry[]
+}
+
+model LedgerEntry {
+  id             String   @id @default(cuid())
+  walletId       String
+  wallet         Wallet   @relation(fields: [walletId], references: [id])
+  type           String
+  amountCents    Int
+  availableDelta Int
+  frozenDelta    Int
+  groupId        String
+  orderId        String?
+  memo           String?
+  createdAt      DateTime @default(now())
+
+  @@index([walletId])
+  @@index([groupId])
+}
+
+model Order {
+  id          String  @id @default(cuid())
+  type        String  @default("COMPRA")
+  status      String  @default("CREADA")
+  clienteId   String
+  cliente     User    @relation("ClientOrders", fields: [clienteId], references: [id])
+  conductorId String?
+  conductor   User?   @relation("DriverOrders", fields: [conductorId], references: [id])
+
+  deliveryAddress  String
+  notes            String?
+  deliveryFeeCents Int
+
+  originAddress       String?
+  originLat           Float?
+  originLng           Float?
+  destLat             Float?
+  destLng             Float?
+  distanceKm          Float?
+  estimatedItemsCents Int     @default(0)
+  finalItemsCents     Int?
+  heldCents           Int     @default(0)
+  pendingExtraCents   Int     @default(0)
+  escrowGroupId       String?
+
+  createdAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  items          OrderItem[]
+  messages       ChatMessage[]
+  trackingPoints TrackingPoint[]
+
+  @@index([status])
+  @@index([clienteId])
+  @@index([conductorId])
+}
+
+model PaymentIntent {
+  id          String    @id @default(cuid())
+  userId      String
+  kind        String
+  method      String
+  amountCents Int
+  status      String    @default("PENDIENTE")
+  reference   String    @unique
+  bank        String?
+  phone       String?
+  cedula      String?
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model TrackingPoint {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model OrderItem {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  name          String
+  qty           Int      @default(1)
+  estUnitCents  Int
+  realUnitCents Int?
+  status        String   @default("PENDIENTE")
+  createdAt     DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  fromUserId String
+  from       User     @relation(fields: [fromUserId], references: [id])
+  text       String
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+}
