@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Super App — Wallet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/theme.css" />
+    <style>
+      body { max-width: 760px; }
+      .bal .n { display: block; }
+    </style>
+  </head>
+  <body>
+    <h1>Super App · Wallet</h1>
+    <p class="sub">Billetera con ledger de doble entrada. · <a href="/app.html">ir a la plataforma →</a></p>
+
+    <!-- LOGIN / REGISTRO -->
+    <div class="card" id="auth-card">
+      <div class="row">
+        <div>
+          <label>Email</label>
+          <input id="email" value="cliente@superapp.local" />
+        </div>
+        <div>
+          <label>Contraseña</label>
+          <input id="password" type="password" value="cliente1234" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="btn-login">Iniciar sesión</button>
+        <button id="btn-register" class="secondary">Registrarme</button>
+      </div>
+      <p class="hint">Demo: <code>cliente@superapp.local</code> / <code>cliente1234</code> · también <code>admin@…</code> / <code>admin1234</code>. Al registrarte se crea tu wallet automáticamente.</p>
+      <div class="err" id="auth-err"></div>
+    </div>
+
+    <!-- REGISTRO EXTRA -->
+    <div class="card hidden" id="register-card">
+      <div class="row">
+        <div><label>Nombre</label><input id="r-name" value="Nuevo Usuario" /></div>
+        <div>
+          <label>Rol</label>
+          <select id="r-role">
+            <option value="CLIENTE">Cliente</option>
+            <option value="CONDUCTOR">Conductor / Shopper</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint">Se usará el email y contraseña de arriba.</p>
+      <button id="btn-do-register">Crear cuenta</button>
+      <button id="btn-cancel-register" class="secondary">Cancelar</button>
+    </div>
+
+    <!-- SESIÓN -->
+    <div class="card hidden" id="session-card">
+      <div class="row" style="align-items:center;">
+        <div>
+          <strong id="s-name"></strong>
+          <span class="pill" id="s-role"></span><br />
+          <span class="hint" id="s-email"></span>
+        </div>
+        <div style="flex:0;">
+          <button class="secondary" id="btn-logout">Salir</button>
+        </div>
+      </div>
+
+      <div class="balances">
+        <div class="bal ok"><div class="l">Disponible</div><div class="n" id="b-available">—</div></div>
+        <div class="bal frozen"><div class="l">Congelado (escrow)</div><div class="n" id="b-frozen">—</div></div>
+        <div class="bal"><div class="l">Total</div><div class="n" id="b-total">—</div></div>
+      </div>
+
+      <label>Fondear wallet (monto)</label>
+      <div class="row">
+        <input id="amount" type="number" value="100" min="0.01" step="0.01" />
+        <button id="btn-cashin" style="flex:0; min-width:140px;">Fondear</button>
+      </div>
+      <div class="err" id="wallet-err"></div>
+
+      <h3 style="margin:18px 0 0; font-size:14px;">Movimientos (ledger)</h3>
+      <table>
+        <thead><tr><th>Tipo</th><th>Monto</th><th>Δ Disp.</th><th>Δ Cong.</th><th>Fecha</th></tr></thead>
+        <tbody id="ledger-body"><tr><td colspan="5" class="hint">Sin movimientos aún.</td></tr></tbody>
+      </table>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let token = null;
+
+      async function api(path, { method = 'GET', body } = {}) {
+        const res = await fetch(path, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Error'));
+        return data;
+      }
+
+      const money = (n) => new Intl.NumberFormat('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
+
+      function showSession(user) {
+        $('auth-card').classList.add('hidden');
+        $('register-card').classList.add('hidden');
+        $('session-card').classList.remove('hidden');
+        $('s-name').textContent = user.name || user.email;
+        $('s-role').textContent = user.role;
+        $('s-email').textContent = user.email;
+      }
+
+      function showLogin() {
+        token = null;
+        $('session-card').classList.add('hidden');
+        $('auth-card').classList.remove('hidden');
+      }
+
+      async function refreshWallet() {
+        const bal = await api('/wallet/me');
+        $('b-available').textContent = money(bal.available);
+        $('b-frozen').textContent = money(bal.frozen);
+        $('b-total').textContent = money(bal.total);
+        const { entries } = await api('/wallet/me/ledger');
+        const body = $('ledger-body');
+        if (!entries.length) { body.innerHTML = '<tr><td colspan="5" class="hint">Sin movimientos aún.</td></tr>'; return; }
+        body.innerHTML = entries.map((e) => `
+          <tr>
+            <td><span class="pill">${e.type}</span></td>
+            <td>${money(e.amount)}</td>
+            <td>${e.availableDelta >= 0 ? '+' : ''}${money(e.availableDelta)}</td>
+            <td>${e.frozenDelta >= 0 ? '+' : ''}${money(e.frozenDelta)}</td>
+            <td class="hint">${new Date(e.createdAt).toLocaleString('es')}</td>
+          </tr>`).join('');
+      }
+
+      $('btn-login').onclick = async () => {
+        $('auth-err').textContent = '';
+        try {
+          const { accessToken, user } = await api('/auth/login', {
+            method: 'POST',
+            body: { email: $('email').value, password: $('password').value },
+          });
+          token = accessToken; showSession(user); await refreshWallet();
+        } catch (e) { $('auth-err').textContent = e.message; }
+      };
+
+      $('btn-register').onclick = () => { $('register-card').classList.remove('hidden'); };
+      $('btn-cancel-register').onclick = () => { $('register-card').classList.add('hidden'); };
+
+      $('btn-do-register').onclick = async () => {
+        $('auth-err').textContent = '';
+        try {
+          const { accessToken, user } = await api('/auth/register', {
+            method: 'POST',
+            body: {
+              email: $('email').value, password: $('password').value,
+              name: $('r-name').value, role: $('r-role').value,
+            },
+          });
+          token = accessToken; showSession(user); await refreshWallet();
+        } catch (e) { $('auth-err').textContent = e.message; }
+      };
+
+      $('btn-cashin').onclick = async () => {
+        $('wallet-err').textContent = '';
+        try {
+          await api('/wallet/me/cash-in', { method: 'POST', body: { amount: Number($('amount').value) } });
+          await refreshWallet();
+        } catch (e) { $('wallet-err').textContent = e.message; }
+      };
+
+      $('btn-logout').onclick = showLogin;
+    </script>
+  </body>
+</html>

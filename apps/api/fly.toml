@@ -1,0 +1,28 @@
+# Configuración de despliegue en Fly.io.
+# Cambia "app" por un nombre único si está tomado (fly deploy te avisa).
+app = "superapp-delivery-pf"
+primary_region = "mia" # Miami: el más cercano a Venezuela (baja latencia)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATABASE_URL = "file:/data/prod.db"
+  PORT = "3000"
+  JWT_EXPIRES_IN = "7d"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+# Volumen persistente: aquí vive la base de datos SQLite (no se borra en cada deploy).
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

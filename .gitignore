@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.local
+*.env
+
+# Prisma / SQLite local dev database
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+apps/api/prisma/dev.db*
+
+# OS
+.DS_Store
+Thumbs.db

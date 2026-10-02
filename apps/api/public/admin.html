@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Super App — Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/theme.css" />
+    <style>
+      body { max-width: 980px; }
+    </style>
+  </head>
+  <body>
+    <h1>Super App · Administración</h1>
+    <p class="sub">Operación, verificación, disputas y configuración. · <a href="/app.html">ir a la app</a></p>
+
+    <div class="card" id="auth">
+      <div class="row">
+        <div><label>Email</label><input id="email" value="admin@superapp.local" /></div>
+        <div><label>Contraseña</label><input id="password" type="password" value="admin1234" /></div>
+        <div style="flex:0; min-width:110px; display:flex; align-items:flex-end;"><button id="btn-login">Entrar</button></div>
+      </div>
+      <div class="err" id="auth-err"></div>
+    </div>
+
+    <div id="app" class="hidden">
+      <div class="card">
+        <div class="row" style="align-items:center"><div><h3 style="margin:0">📊 Dashboard</h3></div><div style="flex:0"><button class="sec" id="btn-refresh">↻ Actualizar</button> <button class="sec" id="btn-logout">Salir</button></div></div>
+        <div class="kpis" id="kpis" style="margin-top:12px"></div>
+        <div class="muted" id="breakdown" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h3>⚖️ Disputas por resolver</h3>
+        <div id="disputes"><p class="muted">—</p></div>
+      </div>
+
+      <div class="card">
+        <h3>👥 Usuarios</h3>
+        <div id="users"></div>
+      </div>
+
+      <div class="card">
+        <h3>⚙️ Configuración de tarifas y comisión</h3>
+        <div class="row">
+          <div><label>Comisión (0–1)</label><input id="c-comm" type="number" step="0.01" /></div>
+          <div><label>Tarifa delivery</label><input id="c-fee" type="number" step="0.01" /></div>
+          <div><label>Banderazo mototaxi</label><input id="c-base" type="number" step="0.01" /></div>
+          <div><label>Por km</label><input id="c-km" type="number" step="0.01" /></div>
+        </div>
+        <button class="go" id="btn-config">Guardar configuración</button>
+        <span class="muted" id="config-ok"></span>
+        <div class="err" id="config-err"></div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let token = null;
+      const money = (n) => (n ?? 0).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      async function api(path, { method = 'GET', body } = {}) {
+        const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Error'));
+        return data;
+      }
+
+      async function loadDashboard() {
+        const d = await api('/admin/dashboard');
+        $('kpis').innerHTML = `
+          <div class="kpi a"><div class="n">${money(d.gmv)}</div><div class="l">GMV</div></div>
+          <div class="kpi b"><div class="n">${money(d.platformEarnings)}</div><div class="l">Ganancias</div></div>
+          <div class="kpi c"><div class="n">${d.activeOrders}</div><div class="l">Órdenes activas</div></div>
+          <div class="kpi d"><div class="n">${d.disputes}</div><div class="l">Disputas</div></div>`;
+        const roles = Object.entries(d.usersByRole).map(([k, v]) => `${k}: <b>${v}</b>`).join(' · ');
+        const st = Object.entries(d.ordersByStatus).map(([k, v]) => `${k}: <b>${v}</b>`).join(' · ');
+        $('breakdown').innerHTML = `👥 ${roles}<br>📦 ${st} · completadas: <b>${d.completedOrders}</b>`;
+      }
+
+      async function loadDisputes() {
+        const list = await api('/admin/disputes');
+        $('disputes').innerHTML = list.length ? list.map((o) => `
+          <div style="border:2px solid var(--line); border-radius:12px; padding:10px; margin-top:8px">
+            <b>${o.type === 'VIAJE' ? '🏍️' : '🛍️'} #${o.id.slice(-6)}</b> · congelado <b>${money(o.heldCents/100)}</b> · ${o.deliveryAddress}
+            <div><button class="go" onclick="resolve('${o.id}','RELEASE')">Pagar al conductor</button>
+            <button class="danger" onclick="resolve('${o.id}','REFUND')">Reembolsar al cliente</button></div>
+          </div>`).join('') : '<p class="muted">No hay disputas 🎉</p>';
+      }
+      window.resolve = async (id, resolution) => {
+        if (!confirm(resolution === 'RELEASE' ? '¿Pagar al conductor?' : '¿Reembolsar al cliente?')) return;
+        try { await api(`/admin/orders/${id}/resolve`, { method: 'POST', body: { resolution } }); await refresh(); } catch (e) { alert(e.message); }
+      };
+
+      async function loadUsers() {
+        const users = await api('/admin/users');
+        $('users').innerHTML = `<table><thead><tr><th>Usuario</th><th>Rol</th><th>KYC</th><th>Saldo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${
+          users.map((u) => `<tr>
+            <td>${u.name}<br><span class="muted">${u.email}</span></td>
+            <td><span class="chip role">${u.role}</span></td>
+            <td><span class="chip ${u.kycStatus}">${u.kycStatus}</span></td>
+            <td>${money(u.available)}${u.frozen ? ' <span class="muted">(🔒'+money(u.frozen)+')</span>' : ''}</td>
+            <td>${u.isActive ? '🟢 activo' : '🔴 suspendido'}</td>
+            <td>
+              ${u.kycStatus !== 'APPROVED' ? `<button class="go" onclick="kyc('${u.id}','APPROVED')">Aprobar</button>` : ''}
+              ${u.kycStatus !== 'REJECTED' ? `<button class="danger" onclick="kyc('${u.id}','REJECTED')">Rechazar</button>` : ''}
+              <button class="sec" onclick="toggleActive('${u.id}',${!u.isActive})">${u.isActive ? 'Suspender' : 'Reactivar'}</button>
+            </td></tr>`).join('')
+        }</tbody></table>`;
+      }
+      window.kyc = async (id, status) => { try { await api(`/admin/users/${id}/kyc`, { method: 'POST', body: { status } }); await loadUsers(); } catch (e) { alert(e.message); } };
+      window.toggleActive = async (id, isActive) => { try { await api(`/admin/users/${id}/active`, { method: 'POST', body: { isActive } }); await loadUsers(); } catch (e) { alert(e.message); } };
+
+      async function loadConfig() {
+        const c = await api('/admin/config');
+        $('c-comm').value = c.commissionRate; $('c-fee').value = c.deliveryFee; $('c-base').value = c.tripBaseFare; $('c-km').value = c.tripPerKm;
+      }
+      $('btn-config').onclick = async () => {
+        $('config-err').textContent = ''; $('config-ok').textContent = '';
+        try {
+          await api('/admin/config', { method: 'PUT', body: {
+            commissionRate: Number($('c-comm').value), deliveryFee: Number($('c-fee').value),
+            tripBaseFare: Number($('c-base').value), tripPerKm: Number($('c-km').value),
+          }});
+          $('config-ok').textContent = '✓ Guardado';
+        } catch (e) { $('config-err').textContent = e.message; }
+      };
+
+      async function refresh() { await Promise.all([loadDashboard(), loadDisputes(), loadUsers()]); }
+
+      $('btn-login').onclick = async () => {
+        $('auth-err').textContent = '';
+        try {
+          const r = await api('/auth/login', { method: 'POST', body: { email: $('email').value, password: $('password').value } });
+          if (r.user.role !== 'ADMIN') throw new Error('Esta cuenta no es de administrador');
+          token = r.accessToken;
+          $('auth').classList.add('hidden'); $('app').classList.remove('hidden');
+          await refresh(); await loadConfig();
+        } catch (e) { $('auth-err').textContent = e.message; }
+      };
+      $('btn-refresh').onclick = refresh;
+      $('btn-logout').onclick = () => location.reload();
+    </script>
+  </body>
+</html>

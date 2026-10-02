@@ -1,0 +1,178 @@
+// Esquema de datos — Fase 0 (usuarios/roles) + Fase 1 (wallet + ledger).
+//
+// Nota sobre la base de datos:
+//   - Dev local: SQLite (sin instalar nada). SQLite en Prisma no soporta enums,
+//     por eso role / type / status son String validados en la capa de aplicación
+//     (ver packages compartidos y DTOs).
+//   - Producción: cambiar `provider` a "postgresql" y DATABASE_URL. El resto del
+//     esquema es compatible; ahí conviene convertir los String a enums nativos.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Usuario de la plataforma. role ∈ {CLIENTE, CONDUCTOR, ADMIN}.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String?  @unique
+  name         String
+  role         String   @default("CLIENTE")
+  passwordHash String
+  kycStatus    String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wallet         Wallet?
+  ordersAsClient Order[]       @relation("ClientOrders")
+  ordersAsDriver Order[]       @relation("DriverOrders")
+  messages       ChatMessage[]
+}
+
+/// Una billetera por usuario. El saldo NO se almacena: se deriva del ledger.
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  entries LedgerEntry[]
+}
+
+/// Libro mayor de doble entrada. Cada registro es INMUTABLE.
+/// El saldo de una wallet = suma de deltas de sus entries:
+///   disponible = Σ availableDelta
+///   congelado  = Σ frozenDelta
+/// Los montos están en céntimos (enteros) para evitar errores de coma flotante.
+/// `groupId` enlaza las "patas" de una misma transacción (p. ej. en un release:
+/// la pata que descongela al cliente y la pata que acredita al conductor).
+model LedgerEntry {
+  id             String   @id @default(cuid())
+  walletId       String
+  wallet         Wallet   @relation(fields: [walletId], references: [id])
+  type           String // CASH_IN | HOLD | RELEASE | REFUND | CASH_OUT | PAYOUT | FEE
+  amountCents    Int // magnitud del movimiento (siempre > 0)
+  availableDelta Int // efecto sobre el saldo disponible (con signo)
+  frozenDelta    Int // efecto sobre el saldo congelado/escrow (con signo)
+  groupId        String // id de la transacción que agrupa ambas patas
+  orderId        String? // orden asociada (Fase 2+)
+  memo           String?
+  createdAt      DateTime @default(now())
+
+  @@index([walletId])
+  @@index([groupId])
+}
+
+/// Orden de compra (Fase 2) o viaje (Fase 4).
+model Order {
+  id          String  @id @default(cuid())
+  type        String  @default("COMPRA") // COMPRA | VIAJE
+  status      String  @default("CREADA")
+  clienteId   String
+  cliente     User    @relation("ClientOrders", fields: [clienteId], references: [id])
+  conductorId String?
+  conductor   User?   @relation("DriverOrders", fields: [conductorId], references: [id])
+
+  deliveryAddress     String // dirección de entrega (COMPRA) o destino (VIAJE)
+  notes               String?
+  deliveryFeeCents    Int // tarifa de delivery/viaje
+
+  // Campos de viaje (VIAJE / mototaxi)
+  originAddress String?
+  originLat     Float?
+  originLng     Float?
+  destLat       Float?
+  destLng       Float?
+  distanceKm    Float?
+  estimatedItemsCents Int  @default(0) // Σ estimado de la lista
+  finalItemsCents     Int? // Σ real tras la compra
+  heldCents           Int  @default(0) // total congelado actualmente en escrow
+  pendingExtraCents   Int  @default(0) // recarga extra pendiente de aprobar
+  escrowGroupId       String? // enlaza los movimientos de escrow de esta orden
+
+  createdAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  items          OrderItem[]
+  messages       ChatMessage[]
+  trackingPoints TrackingPoint[]
+
+  @@index([status])
+  @@index([clienteId])
+  @@index([conductorId])
+}
+
+/// Intento de pago (fondeo o retiro) a través de la pasarela (Pago Móvil, etc.).
+model PaymentIntent {
+  id          String   @id @default(cuid())
+  userId      String
+  kind        String // CASH_IN | CASH_OUT
+  method      String // PAGO_MOVIL | EFECTIVO
+  amountCents Int
+  status      String   @default("PENDIENTE") // PENDIENTE | CONFIRMADO | FALLIDO
+  reference   String   @unique // referencia para conciliar el pago
+  // Datos de la contraparte (Pago Móvil del usuario, para cash-out)
+  bank        String?
+  phone       String?
+  cedula      String?
+  createdAt   DateTime @default(now())
+  confirmedAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+}
+
+/// Configuración de la plataforma editable por el admin (tarifas, comisión…).
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/// Posición del conductor durante el servicio (tracking en tiempo real).
+model TrackingPoint {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+/// Producto dentro de una orden de compra. Precios por unidad, en céntimos.
+model OrderItem {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  name          String
+  qty           Int      @default(1)
+  estUnitCents  Int // precio unitario estimado
+  realUnitCents Int? // precio unitario real pagado en caja
+  status        String   @default("PENDIENTE") // PENDIENTE | COMPRADO | AGOTADO | REEMPLAZADO
+  createdAt     DateTime @default(now())
+
+  @@index([orderId])
+}
+
+/// Chat de la orden (p. ej. para acordar reemplazos de productos agotados).
+model ChatMessage {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  fromUserId String
+  from       User     @relation(fields: [fromUserId], references: [id])
+  text       String
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+}
