@@ -57,12 +57,15 @@ export class OrdersService {
     const items = dto.items.map((i) => ({
       name: i.name,
       qty: i.qty,
-      estUnitCents: toCents(i.estUnitPrice),
+      estUnitCents: i.estUnitPrice !== undefined ? toCents(i.estUnitPrice) : 0,
     }));
-    const estimatedItemsCents = items.reduce(
-      (sum, i) => sum + i.estUnitCents * i.qty,
-      0,
-    );
+
+    // Modo presupuesto: el cliente dice cuánto piensa gastar (sin precios unitarios).
+    // Modo itemizado: se suma precio unitario × cantidad.
+    const estimatedItemsCents =
+      dto.budget !== undefined
+        ? toCents(dto.budget)
+        : items.reduce((sum, i) => sum + i.estUnitCents * i.qty, 0);
 
     const order = await this.prisma.order.create({
       data: {
@@ -70,7 +73,10 @@ export class OrdersService {
         status: OrderStatus.CREADA,
         clienteId,
         deliveryAddress: dto.deliveryAddress,
-        notes: dto.notes,
+        originAddress: dto.storeName, // reutilizamos originAddress para el comercio
+        notes: dto.category
+          ? `[${dto.category}] ${dto.notes ?? ''}`.trim()
+          : dto.notes,
         deliveryFeeCents: feeCents,
         estimatedItemsCents,
         items: { create: items },
@@ -83,14 +89,15 @@ export class OrdersService {
 
   // ───────────────────────── Viajes (mototaxi, Fase 4) ─────────────────────────
 
+  /** Distancia a usar: la real por calles (si el mapa la calculó) o la línea recta. */
+  private resolveDistanceKm(dto: CreateTripDto): number {
+    if (dto.distanceKm && dto.distanceKm > 0) return dto.distanceKm;
+    return haversineKm(dto.originLat, dto.originLng, dto.destLat, dto.destLng);
+  }
+
   /** Estima distancia y tarifa de un viaje sin crearlo. */
   async estimateTrip(dto: CreateTripDto) {
-    const distanceKm = haversineKm(
-      dto.originLat,
-      dto.originLng,
-      dto.destLat,
-      dto.destLng,
-    );
+    const distanceKm = this.resolveDistanceKm(dto);
     const fareCents = await this.settings.tripFareCents(distanceKm);
     return {
       distanceKm: Math.round(distanceKm * 100) / 100,
@@ -100,12 +107,7 @@ export class OrdersService {
 
   /** Crea un viaje en borrador con su tarifa (mismo escrow que una compra). */
   async createTripDraft(clienteId: string, dto: CreateTripDto) {
-    const distanceKm = haversineKm(
-      dto.originLat,
-      dto.originLng,
-      dto.destLat,
-      dto.destLng,
-    );
+    const distanceKm = this.resolveDistanceKm(dto);
     const fareCents = await this.settings.tripFareCents(distanceKm);
 
     const order = await this.prisma.order.create({
@@ -595,31 +597,45 @@ export class OrdersService {
    *  - si supera el escrow → ESPERA_APROBACION (recarga extra del cliente)
    *  - si no → EN_CAMINO (el excedente se reembolsa al confirmar)
    */
-  async finishShopping(conductorId: string, orderId: string) {
+  async finishShopping(
+    conductorId: string,
+    orderId: string,
+    finalItemsTotal?: number,
+  ) {
     const order = await this.loadAsDriver(orderId, conductorId);
     if (order.status !== OrderStatus.COMPRANDO) {
       throw new BadRequestException('La orden no está en fase de compra');
     }
 
-    const items = await this.prisma.orderItem.findMany({ where: { orderId } });
-    const pending = items.filter(
-      (i) => i.status === OrderItemStatus.PENDIENTE,
-    );
-    if (pending.length > 0) {
-      throw new BadRequestException(
-        'Hay productos sin marcar (comprado / agotado / reemplazado)',
-      );
-    }
+    let finalItemsCents: number;
 
-    let finalItemsCents = 0;
-    for (const i of items) {
-      if (PURCHASED_ITEM_STATUSES.includes(i.status)) {
-        if (i.realUnitCents === null) {
-          throw new BadRequestException(
-            `Falta el precio real de "${i.name}"`,
-          );
+    if (finalItemsTotal !== undefined) {
+      // Modo presupuesto: el conductor ingresa el total real del ticket.
+      if (finalItemsTotal < 0) {
+        throw new BadRequestException('Total inválido');
+      }
+      finalItemsCents = toCents(finalItemsTotal);
+    } else {
+      // Modo itemizado: se suma el precio real de cada producto marcado.
+      const items = await this.prisma.orderItem.findMany({
+        where: { orderId },
+      });
+      const pending = items.filter(
+        (i) => i.status === OrderItemStatus.PENDIENTE,
+      );
+      if (pending.length > 0) {
+        throw new BadRequestException(
+          'Hay productos sin marcar (comprado / agotado / reemplazado)',
+        );
+      }
+      finalItemsCents = 0;
+      for (const i of items) {
+        if (PURCHASED_ITEM_STATUSES.includes(i.status)) {
+          if (i.realUnitCents === null) {
+            throw new BadRequestException(`Falta el precio real de "${i.name}"`);
+          }
+          finalItemsCents += i.realUnitCents * i.qty;
         }
-        finalItemsCents += i.realUnitCents * i.qty;
       }
     }
 

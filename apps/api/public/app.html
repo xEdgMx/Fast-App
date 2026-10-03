@@ -2,92 +2,209 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Super App — Flujo en vivo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>Fast App</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/theme.css" />
     <style>
-      #map { height: 260px; margin-top: 10px; }
-      #trip-map { height: 240px; }
+      body { padding: 0; max-width: 480px; background: #fff; }
+      .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--line); }
+      .topbar .brand { font-weight: 800; font-size: 17px; }
+      .topbar .brand .f { color: var(--accent); }
+      .saldo-chip { display: inline-flex; align-items: center; gap: 6px; background: #f1f3f6; border: 1px solid var(--line);
+        border-radius: 999px; padding: 5px 12px; font-weight: 700; font-size: 13px; cursor: pointer; }
+      .saldo-chip b { color: var(--green); }
+      .wrap { padding: 16px; }
+      /* Pantallas */
+      .screen { display: none; animation: slideIn .28s ease; }
+      .screen.active { display: block; }
+      @keyframes slideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+      .backbtn { background: none; color: var(--muted); border: 0; padding: 4px 0; margin: 0 0 8px; font-weight: 600; box-shadow: none; cursor: pointer; }
+      h2.ttl { font-size: 20px; margin: 2px 0 4px; }
+      .lead { color: var(--muted); margin: 0 0 18px; }
+      /* Tarjetas de elección grandes */
+      .choice { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: #fff; color: var(--ink);
+        border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin: 0 0 14px; box-shadow: var(--shadow); cursor: pointer; transition: transform .08s, border-color .15s; }
+      .choice:hover { transform: translateY(-2px); border-color: var(--accent); }
+      .choice .emoji { font-size: 30px; }
+      .choice .t { font-weight: 700; font-size: 16px; }
+      .choice .d { color: var(--muted); font-size: 13px; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .cat { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 10px; text-align: center; cursor: pointer; box-shadow: var(--shadow); transition: transform .08s, border-color .15s; }
+      .cat:hover { transform: translateY(-2px); border-color: var(--accent); }
+      .cat .e { font-size: 26px; } .cat .n { font-weight: 600; font-size: 13px; margin-top: 4px; }
+      #ride-map, #detail-map { height: 300px; border-radius: 14px; border: 1px solid var(--line); overflow: hidden; }
+      .fare-card { background: #fff7f3; border: 1px solid #ffd9c9; border-radius: 14px; padding: 14px; margin-top: 12px; }
+      .fare-card .big { font-size: 26px; font-weight: 800; color: var(--accent); }
+      .plist-row { display: grid; grid-template-columns: 1fr 64px 36px; gap: 8px; margin-top: 8px; align-items: center; }
+      .plist-head { display: grid; grid-template-columns: 1fr 64px 36px; gap: 8px; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-top: 10px; }
+      .ordcard { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-top: 12px; background: #fff; box-shadow: var(--shadow); cursor: pointer; }
+      .ordcard .hd { display: flex; justify-content: space-between; align-items: center; }
+      .ordcard .ic { font-size: 20px; }
+      .chatbox { border: 1px solid var(--line); border-radius: 12px; padding: 10px; height: 180px; overflow-y: auto; background: #fcfcfd; margin-top: 8px; }
+      .bubble { max-width: 80%; padding: 8px 12px; border-radius: 14px; margin: 5px 0; font-size: 14px; }
+      .bubble.me { background: var(--accent); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+      .bubble.them { background: #eef0f4; color: var(--ink); border-bottom-left-radius: 4px; }
+      .chatform { display: flex; gap: 8px; margin-top: 8px; }
+      .chatform input { flex: 1; }
+      .chatform button { flex: 0 0 auto; }
+      #toast { position: fixed; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; max-width: 480px; margin-inline: auto; }
+      .pm-box { background: #fff7f3; border: 1px dashed var(--accent); border-radius: 12px; padding: 12px; margin-top: 10px; }
+      .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+      .empty .e { font-size: 34px; }
     </style>
   </head>
   <body>
-    <h1>Super App · Operaciones</h1>
-    <p class="sub">Plataforma en vivo. Ábrela en <b>dos pestañas</b> — cliente y conductor. · <a href="/">wallet</a> · <a href="/admin.html">admin</a></p>
-
-    <div class="card" id="auth">
-      <div class="row">
-        <div><label>Email</label><input id="email" value="cliente@superapp.local" /></div>
-        <div><label>Contraseña</label><input id="password" type="password" value="cliente1234" /></div>
-        <div style="flex:0; min-width:110px; display:flex; align-items:flex-end;"><button id="btn-login">Entrar</button></div>
-      </div>
-      <p class="muted">🛍️ cliente@superapp.local / cliente1234 &nbsp;·&nbsp; 🏍️ conductor@superapp.local / conductor1234</p>
-      <div class="err" id="auth-err"></div>
-    </div>
-
-    <div class="card hidden" id="session">
-      <div class="row" style="align-items:center">
-        <div><b id="s-name"></b> <span class="chip" id="s-role"></span> <span class="live hidden" id="live"><span class="dot"></span>en vivo</span></div>
-        <div style="flex:0"><button class="sec" id="btn-logout">Salir</button></div>
-      </div>
-      <div style="margin-top:10px">
-        <span class="bal ok">💚 Disponible <b id="b-av">—</b></span>
-        <span class="bal fz">🔒 Congelado <b id="b-fz">—</b></span>
-        <input id="fund" type="number" value="100" style="width:90px; display:inline-block" />
-        <button id="btn-fund">Fondear (Pago Móvil) 💳</button>
-        <button class="sec" id="btn-cashout">Retirar 💸</button>
-      </div>
-      <div id="pm-box" class="hidden" style="margin-top:10px; background:rgba(245,158,11,.08); border:1px dashed var(--mango); border-radius:12px; padding:12px">
-        <div id="pm-instructions" class="muted"></div>
-        <button class="go" id="btn-pm-confirm">Ya hice el Pago Móvil ✅</button>
+    <!-- LOGIN -->
+    <div id="s-login" class="screen active">
+      <div class="wrap" style="padding-top: 40px;">
+        <h1 style="text-align:center; font-size:30px; margin-bottom:4px;"><span style="color:var(--accent)">Fast</span> App</h1>
+        <p class="lead" style="text-align:center">Pide y desplázate rápido 🛵</p>
+        <div class="card">
+          <label>Correo</label><input id="email" value="cliente@superapp.local" />
+          <label>Contraseña</label><input id="password" type="password" value="cliente1234" />
+          <button id="btn-login" style="width:100%; margin-top:14px;">Entrar</button>
+          <p class="hint" style="margin-top:10px">Prueba con 2 dispositivos:<br>🛍️ cliente@superapp.local / cliente1234<br>🏍️ conductor@superapp.local / conductor1234</p>
+          <div class="err" id="login-err"></div>
+        </div>
       </div>
     </div>
 
-    <div id="toast" style="position:fixed; right:18px; bottom:18px; display:flex; flex-direction:column; gap:8px; z-index:9999"></div>
+    <!-- APP (tras login) -->
+    <div id="app" class="hidden">
+      <div class="topbar">
+        <div class="brand"><span class="f">Fast</span> App</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="saldo-chip" id="saldo" onclick="go('s-wallet')">💰 <b id="saldo-n">—</b></span>
+          <span class="live hidden" id="live"><span class="dot"></span></span>
+          <button class="sec" style="padding:5px 10px; margin:0;" onclick="logout()">Salir</button>
+        </div>
+      </div>
 
-    <div class="card hidden" id="cli-new">
-      <h3>🧺 Nueva orden de compra</h3>
-      <label>Dirección de entrega</label>
-      <input id="addr" value="Av. Siempre Viva 742" />
-      <div id="items"></div>
-      <button class="sec" id="btn-add-item">+ Producto</button>
-      <button id="btn-create">Crear orden (estimar) 🧮</button>
-      <div class="err" id="cli-err"></div>
+      <!-- ===== CLIENTE ===== -->
+      <!-- Inicio -->
+      <div id="s-home" class="screen"><div class="wrap">
+        <h2 class="ttl">Hola 👋</h2>
+        <p class="lead">¿Qué quieres hacer?</p>
+        <button class="choice" onclick="go('s-ride')">
+          <span class="emoji">🏍️</span>
+          <span><span class="t">Trasladarme</span><br><span class="d">Pide un mototaxi a donde vayas</span></span>
+        </button>
+        <button class="choice" onclick="go('s-cat')">
+          <span class="emoji">🛍️</span>
+          <span><span class="t">Pedir algo</span><br><span class="d">Compras, comida, farmacia y más</span></span>
+        </button>
+        <button class="choice" onclick="loadOrders()">
+          <span class="emoji">📦</span>
+          <span><span class="t">Mis pedidos</span><br><span class="d">Mira el estado de lo que pediste</span></span>
+        </button>
+      </div></div>
+
+      <!-- Mototaxi -->
+      <div id="s-ride" class="screen"><div class="wrap">
+        <button class="backbtn" onclick="go('s-home')">← Inicio</button>
+        <h2 class="ttl">🏍️ Mototaxi</h2>
+        <p class="lead">Toca el mapa: <b>1</b> tu origen 🟢, <b>2</b> tu destino 🔴.</p>
+        <div id="ride-map"></div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Desde</label><input id="r-origin" placeholder="Toca el mapa" readonly /></div>
+          <div><label>Hasta</label><input id="r-dest" placeholder="Toca el mapa" readonly /></div>
+        </div>
+        <button class="sec" style="margin-top:8px" onclick="resetRide()">↺ Reiniciar puntos</button>
+        <div id="fare" class="hidden fare-card"></div>
+        <button class="go" id="btn-ride" style="width:100%; margin-top:12px;" disabled>Pedir viaje 🛵</button>
+        <div class="err" id="ride-err"></div>
+      </div></div>
+
+      <!-- Categorías -->
+      <div id="s-cat" class="screen"><div class="wrap">
+        <button class="backbtn" onclick="go('s-home')">← Inicio</button>
+        <h2 class="ttl">🛍️ ¿Qué quieres pedir?</h2>
+        <p class="lead">Elige una categoría.</p>
+        <div class="grid2">
+          <div class="cat" onclick="startOrder('Supermercado','🛒')"><div class="e">🛒</div><div class="n">Supermercado</div></div>
+          <div class="cat" onclick="startOrder('Comida rápida','🍔')"><div class="e">🍔</div><div class="n">Comida rápida</div></div>
+          <div class="cat" onclick="startOrder('Farmacia','💊')"><div class="e">💊</div><div class="n">Farmacia</div></div>
+          <div class="cat" onclick="startOrder('Tienda de ropa','👕')"><div class="e">👕</div><div class="n">Ropa</div></div>
+          <div class="cat" onclick="startOrder('Bebidas','🥤')"><div class="e">🥤</div><div class="n">Bebidas</div></div>
+          <div class="cat" onclick="startOrder('Otro','📦')"><div class="e">📦</div><div class="n">Otro</div></div>
+        </div>
+      </div></div>
+
+      <!-- Formulario de pedido (lista + presupuesto) -->
+      <div id="s-store" class="screen"><div class="wrap">
+        <button class="backbtn" onclick="go('s-cat')">← Categorías</button>
+        <h2 class="ttl"><span id="store-ic">🛒</span> <span id="store-cat">Supermercado</span></h2>
+        <label>Comercio (nombre y dónde queda)</label>
+        <input id="o-store" placeholder="Ej: La Pradera, por Tulum" />
+        <label>¿A dónde lo llevamos? (tu dirección)</label>
+        <input id="o-addr" placeholder="Ej: Calle 10, casa azul" />
+        <label>¿Cuánto piensas gastar? (presupuesto)</label>
+        <input id="o-budget" type="number" step="0.01" placeholder="Ej: 30" />
+        <div class="plist-head"><div>Producto</div><div>Cant.</div><div></div></div>
+        <div id="o-items"></div>
+        <button class="sec" style="margin-top:8px" onclick="addProd()">+ Agregar producto</button>
+        <button class="go" id="btn-order" style="width:100%; margin-top:12px;">Pedir 🛒</button>
+        <p class="hint">No necesitas saber los precios: tú pones tu presupuesto y el repartidor te avisa por el chat si alcanza. 😉</p>
+        <div class="err" id="order-err"></div>
+      </div></div>
+
+      <!-- Mis pedidos -->
+      <div id="s-orders" class="screen"><div class="wrap">
+        <button class="backbtn" onclick="go('s-home')">← Inicio</button>
+        <h2 class="ttl">📦 Mis pedidos</h2>
+        <div id="orders-list"></div>
+      </div></div>
+
+      <!-- ===== CONDUCTOR ===== -->
+      <div id="s-driver" class="screen"><div class="wrap">
+        <h2 class="ttl">🏍️ Panel del conductor</h2>
+        <p class="lead" id="driver-sub">Pedidos disponibles y tus entregas.</p>
+        <div id="driver-list"></div>
+      </div></div>
+
+      <!-- ===== DETALLE (compartido) ===== -->
+      <div id="s-detail" class="screen"><div class="wrap">
+        <button class="backbtn" id="detail-back">← Volver</button>
+        <div id="detail-body"></div>
+      </div></div>
+
+      <!-- ===== WALLET ===== -->
+      <div id="s-wallet" class="screen"><div class="wrap">
+        <button class="backbtn" onclick="goBack()">← Volver</button>
+        <h2 class="ttl">💰 Mi saldo</h2>
+        <div class="card" style="text-align:center">
+          <div class="hint">Disponible</div>
+          <div style="font-size:34px; font-weight:800; color:var(--green)" id="w-av">—</div>
+          <div class="hint" id="w-fz-line"></div>
+        </div>
+        <label>Monto a recargar</label>
+        <div class="row">
+          <input id="w-amount" type="number" value="20" step="0.01" />
+          <button id="w-fund" style="flex:0 0 auto">Recargar (Pago Móvil) 💳</button>
+        </div>
+        <div id="pm-box" class="hidden pm-box">
+          <div class="muted" id="pm-ins"></div>
+          <button class="go" id="pm-confirm" style="margin-top:8px">Ya hice el Pago Móvil ✅</button>
+        </div>
+        <button class="sec" style="width:100%; margin-top:14px" onclick="cashOut()">Retirar a Pago Móvil 💸</button>
+        <div class="err" id="w-err"></div>
+      </div></div>
     </div>
 
-    <div class="card hidden" id="cli-trip">
-      <h3>🏍️ Pedir mototaxi</h3>
-      <p class="muted" style="margin:0 0 6px">Haz clic en el mapa: 1er clic = <b>origen</b> 🟢, 2º clic = <b>destino</b> 🔴. (Doble clic para reiniciar.)</p>
-      <div id="trip-map" style="height:240px; border-radius:12px"></div>
-      <div class="row" style="margin-top:10px">
-        <div><label>Origen</label><input id="t-origin" placeholder="Toca el mapa…" /></div>
-        <div><label>Destino</label><input id="t-dest" placeholder="Toca el mapa…" /></div>
-      </div>
-      <div style="margin-top:10px; font-weight:700" id="t-estimate">Distancia y tarifa aparecerán aquí 🧮</div>
-      <button class="go" id="btn-trip" disabled>Pedir viaje 🛵</button>
-      <div class="err" id="trip-err"></div>
-    </div>
-
-    <div class="grid">
-      <div class="card hidden" id="panel">
-        <h3 id="panel-title"></h3>
-        <div id="list"></div>
-      </div>
-      <div class="card hidden" id="detail">
-        <h3 id="detail-title">Detalle</h3>
-        <div id="detail-body" class="muted">Selecciona una orden para ver el chat y el mapa en vivo.</div>
-      </div>
-    </div>
+    <div id="toast"></div>
 
     <script>
       const $ = (id) => document.getElementById(id);
-      let token = null, me = null, socket = null, selected = null, map = null, marker = null;
+      let token = null, me = null, socket = null;
+      let selected = null, prevScreen = 's-home';
       const money = (n) => (n ?? 0).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const esc = (s) => (s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
       async function api(path, { method = 'GET', body } = {}) {
         const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -96,276 +213,277 @@
         return data;
       }
 
-      function addItemRow(name = '', qty = 1, price = '') {
-        const div = document.createElement('div');
-        div.className = 'item-row';
-        div.innerHTML = `<input class="i-name" placeholder="Producto" value="${name}" style="flex:2"/>
-          <input class="i-qty" type="number" min="1" value="${qty}" style="flex:0; width:60px"/>
-          <input class="i-price" type="number" step="0.01" placeholder="precio" value="${price}" style="flex:0; width:90px"/>
-          <button class="sec" style="flex:0" onclick="this.parentElement.remove()">✕</button>`;
-        $('items').appendChild(div);
+      // ---------- navegación de pantallas ----------
+      function go(id, keepPrev) {
+        if (!keepPrev && id !== 's-wallet' && id !== 's-detail') prevScreen = id;
+        document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
+        $(id).classList.add('active');
+        window.scrollTo(0, 0);
+        if (id === 's-ride') setTimeout(initRideMap, 60);
+        if (id === 's-home' || id === 's-driver') refreshSaldo();
       }
-      $('btn-add-item').onclick = () => addItemRow();
+      window.go = go;
+      function goBack() { go(prevScreen); }
+      window.goBack = goBack;
 
-      $('btn-create').onclick = async () => {
-        $('cli-err').textContent = '';
+      async function refreshSaldo() {
+        try { const b = await api('/wallet/me'); $('saldo-n').textContent = money(b.available); } catch (e) {}
+      }
+
+      // ---------- MOTOTAXI con ruta real (OSRM) ----------
+      let rideMap = null, oPt = null, dPt = null, oMk = null, dMk = null, routeLine = null, rideKm = null;
+      const tiles = () => L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
+      function initRideMap() {
+        if (!$('ride-map')) return;
+        if (!rideMap) { rideMap = L.map('ride-map').setView([10.47, -66.9], 13); tiles().addTo(rideMap); rideMap.on('click', (e) => onRideClick(e.latlng)); }
+        rideMap.invalidateSize();
+        // intenta centrar en la ubicación del usuario
+        if (!oPt && navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => rideMap.setView([p.coords.latitude, p.coords.longitude], 15), () => {});
+      }
+      function onRideClick(ll) {
+        if (!oPt) { oPt = ll; oMk = L.marker(ll).addTo(rideMap).bindPopup('🟢 Origen').openPopup(); $('r-origin').value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`; }
+        else if (!dPt) { dPt = ll; dMk = L.marker(ll).addTo(rideMap).bindPopup('🔴 Destino').openPopup(); $('r-dest').value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`; drawRoute(); }
+      }
+      function resetRide() {
+        oPt = dPt = rideKm = null; $('r-origin').value = ''; $('r-dest').value = ''; $('fare').classList.add('hidden'); $('btn-ride').disabled = true;
+        [oMk, dMk, routeLine].forEach((l) => l && rideMap.removeLayer(l)); oMk = dMk = routeLine = null;
+      }
+      window.resetRide = resetRide;
+      async function drawRoute() {
+        $('ride-err').textContent = '';
         try {
-          const items = [...document.querySelectorAll('.item-row')].map((r) => ({
-            name: r.querySelector('.i-name').value, qty: Number(r.querySelector('.i-qty').value), estUnitPrice: Number(r.querySelector('.i-price').value),
-          })).filter((i) => i.name && i.estUnitPrice > 0);
-          if (!items.length) throw new Error('Agrega al menos un producto con precio');
-          await api('/orders', { method: 'POST', body: { deliveryAddress: $('addr').value, items } });
-          await refresh();
-        } catch (e) { $('cli-err').textContent = e.message; }
-      };
-
-      async function act(path, body) { try { await api(path, { method: 'POST', body }); await refresh(); if (selected) openDetail(selected); } catch (e) { alert(e.message); } }
-      window.act = act;
-
-      // ---------- Pedir mototaxi (mapa) ----------
-      let tripMap = null, oPt = null, dPt = null, oMk = null, dMk = null;
-      function initTripMap() {
-        if (tripMap || !$('trip-map')) return;
-        tripMap = L.map('trip-map').setView([10.5, -66.9], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(tripMap);
-        tripMap.on('click', (e) => onTripClick(e.latlng));
-        tripMap.on('dblclick', resetTrip);
-      }
-      function onTripClick(ll) {
-        if (!oPt) {
-          oPt = ll; oMk = L.marker(ll).addTo(tripMap).bindPopup('🟢 Origen').openPopup();
-          $('t-origin').value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
-        } else if (!dPt) {
-          dPt = ll; dMk = L.marker(ll).addTo(tripMap).bindPopup('🔴 Destino').openPopup();
-          $('t-dest').value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
-          L.polyline([oPt, dPt], { color: '#8a5cf6', weight: 4 }).addTo(tripMap);
-          estimateTrip();
+          const url = `https://router.project-osrm.org/route/v1/driving/${oPt.lng},${oPt.lat};${dPt.lng},${dPt.lat}?overview=full&geometries=geojson`;
+          const r = await fetch(url).then((x) => x.json());
+          if (r.code === 'Ok' && r.routes[0]) {
+            rideKm = Math.round((r.routes[0].distance / 1000) * 100) / 100;
+            if (routeLine) rideMap.removeLayer(routeLine);
+            routeLine = L.geoJSON(r.routes[0].geometry, { style: { color: '#ff6a3d', weight: 5 } }).addTo(rideMap);
+            rideMap.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+          } else throw new Error('sin ruta');
+        } catch (e) {
+          // fallback: línea recta (el servidor calculará por línea recta)
+          rideKm = null;
+          if (routeLine) rideMap.removeLayer(routeLine);
+          routeLine = L.polyline([oPt, dPt], { color: '#ff6a3d', weight: 4, dashArray: '6' }).addTo(rideMap);
+          rideMap.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
         }
+        await estimateRide();
       }
-      function resetTrip() {
-        oPt = dPt = null;
-        $('t-origin').value = ''; $('t-dest').value = '';
-        $('t-estimate').textContent = 'Distancia y tarifa aparecerán aquí 🧮';
-        $('btn-trip').disabled = true;
-        tripMap.eachLayer((l) => { if (l instanceof L.Marker || l instanceof L.Polyline) tripMap.removeLayer(l); });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(tripMap);
+      async function estimateRide() {
+        const body = tripBody();
+        const r = await api('/trips/estimate', { method: 'POST', body });
+        $('fare').classList.remove('hidden');
+        $('fare').innerHTML = `📏 <b>${r.distanceKm} km</b> por las calles · tarifa<br><span class="big">${money(r.fare)}</span>`;
+        $('btn-ride').disabled = false;
       }
       function tripBody() {
-        return { originAddress: $('t-origin').value, originLat: oPt.lat, originLng: oPt.lng, destAddress: $('t-dest').value, destLat: dPt.lat, destLng: dPt.lng };
+        const b = { originAddress: $('r-origin').value, originLat: oPt.lat, originLng: oPt.lng, destAddress: $('r-dest').value, destLat: dPt.lat, destLng: dPt.lng };
+        if (rideKm) b.distanceKm = rideKm;
+        return b;
       }
-      async function estimateTrip() {
-        try {
-          const r = await api('/trips/estimate', { method: 'POST', body: tripBody() });
-          $('t-estimate').innerHTML = `📏 ${r.distanceKm} km · 💵 tarifa <b style="color:var(--mint)">${money(r.fare)}</b>`;
-          $('btn-trip').disabled = false;
-        } catch (e) { $('trip-err').textContent = e.message; }
-      }
-      $('btn-trip').onclick = async () => {
-        $('trip-err').textContent = '';
+      $('btn-ride').onclick = async () => {
+        $('ride-err').textContent = '';
         try {
           const trip = await api('/trips', { method: 'POST', body: tripBody() });
-          await api(`/orders/${trip.id}/publish`, { method: 'POST' }); // se congela la tarifa
-          resetTrip();
-          await refresh();
-        } catch (e) { $('trip-err').textContent = e.message; }
+          await api(`/orders/${trip.id}/publish`, { method: 'POST' });
+          resetRide();
+          showToast('¡Viaje solicitado! Buscando conductor… 🏍️', 'success');
+          openDetail(trip.id);
+        } catch (e) { $('ride-err').textContent = e.message; }
       };
 
-      async function markItem(orderId, itemId) {
-        const status = prompt('Estado del producto: COMPRADO / AGOTADO / REEMPLAZADO', 'COMPRADO');
-        if (!status) return;
-        const body = { status };
-        if (status !== 'AGOTADO') body.realUnitPrice = Number(prompt('Precio unitario real:', '0'));
-        await act(`/orders/${orderId}/items/${itemId}`, body);
+      // ---------- PEDIR (compras por presupuesto) ----------
+      let orderCat = 'Supermercado';
+      function startOrder(cat, ic) { orderCat = cat; $('store-cat').textContent = cat; $('store-ic').textContent = ic; if (!$('o-items').children.length) { addProd('Leche', 2); addProd('Pan', 1); } go('s-store'); }
+      window.startOrder = startOrder;
+      function addProd(name = '', qty = 1) {
+        const d = document.createElement('div'); d.className = 'plist-row';
+        d.innerHTML = `<input class="p-name" placeholder="Ej: Arroz" value="${name}"/><input class="p-qty" type="number" min="1" value="${qty}"/><button class="sec" style="margin:0" onclick="this.parentElement.remove()">✕</button>`;
+        $('o-items').appendChild(d);
       }
-      window.markItem = markItem;
+      window.addProd = addProd;
+      $('btn-order').onclick = async () => {
+        $('order-err').textContent = '';
+        try {
+          const items = [...document.querySelectorAll('#o-items .plist-row')].map((r) => ({ name: r.querySelector('.p-name').value.trim(), qty: Number(r.querySelector('.p-qty').value) })).filter((i) => i.name);
+          if (!items.length) throw new Error('Agrega al menos un producto');
+          if (!$('o-addr').value.trim()) throw new Error('Indica tu dirección de entrega');
+          const budget = Number($('o-budget').value);
+          if (!budget || budget <= 0) throw new Error('Indica cuánto piensas gastar');
+          const order = await api('/orders', { method: 'POST', body: { deliveryAddress: $('o-addr').value.trim(), storeName: $('o-store').value.trim(), category: orderCat, budget, items } });
+          await api(`/orders/${order.id}/publish`, { method: 'POST' });
+          showToast('¡Pedido enviado! Buscando repartidor… 🛵', 'success');
+          $('o-items').innerHTML = ''; $('o-budget').value = '';
+          openDetail(order.id);
+        } catch (e) { $('order-err').textContent = e.message; }
+      };
 
-      function clientButtons(o) {
-        const b = [];
-        if (o.status === 'CREADA') b.push(`<button onclick="act('/orders/${o.id}/publish')">🚀 Publicar</button>`);
-        if (o.status === 'ESPERA_APROBACION') b.push(`<button class="go" onclick="act('/orders/${o.id}/approve-extra')">✅ Aprobar recarga +${money(o.totals.pendingExtra)}</button>`);
-        if (o.status === 'ENTREGADA') b.push(`<button class="go" onclick="act('/orders/${o.id}/confirm-delivery')">🎁 Confirmar entrega</button>`);
-        if (['CREADA','PUBLICADA','ACEPTADA'].includes(o.status)) b.push(`<button class="danger" onclick="act('/orders/${o.id}/cancel')">Cancelar</button>`);
-        return b.join('');
+      // ---------- LISTAS ----------
+      async function loadOrders() {
+        go('s-orders');
+        const orders = await api('/orders/mine');
+        $('orders-list').innerHTML = orders.length ? orders.map(ordCard).join('') : emptyMsg('📭', 'Aún no tienes pedidos');
       }
-      function driverButtons(o) {
-        const b = [];
+      window.loadOrders = loadOrders;
+      function ordCard(o) {
         const trip = o.type === 'VIAJE';
-        if (o.status === 'PUBLICADA') b.push(`<button class="go" onclick="act('/orders/${o.id}/accept')">🙋 Aceptar</button>`);
-        if (o.status === 'ACEPTADA' && trip) b.push(`<button onclick="act('/orders/${o.id}/start-trip')">🏍️ Iniciar viaje</button>`);
-        if (o.status === 'ACEPTADA' && !trip) b.push(`<button onclick="act('/orders/${o.id}/start-shopping')">🛒 Empezar compra</button>`);
-        if (o.status === 'COMPRANDO') { o.items.forEach((it) => b.push(`<button class="sec" onclick="markItem('${o.id}','${it.id}')">${it.name} · ${it.status}</button>`)); b.push(`<button onclick="act('/orders/${o.id}/finish-shopping')">✔️ Terminar compra</button>`); }
-        if (o.status === 'EN_CAMINO') b.push(`<button class="go" onclick="act('/orders/${o.id}/deliver')">${trip ? '🏁 Finalizar viaje' : '📦 Marcar entregado'}</button>`);
-        return b.join('');
+        const sub = trip ? `${o.originAddress || 'Origen'} → ${o.deliveryAddress}` : `${o.originAddress || 'Comercio'} · entrega: ${o.deliveryAddress}`;
+        return `<div class="ordcard" onclick="openDetail('${o.id}')"><div class="hd"><div><span class="ic">${trip ? '🏍️' : '🛍️'}</span> <b>#${o.id.slice(-5)}</b></div><span class="chip st ${o.status}">${pretty(o.status)}</span></div>
+          <div class="muted" style="margin-top:6px">${esc(sub)}</div>
+          <div class="muted">${trip ? 'Tarifa' : 'Presupuesto'}: <b>${money(o.totals.estimatedTotal)}</b>${o.totals.finalTotal != null ? ' · Final: <b>' + money(o.totals.finalTotal) + '</b>' : ''}</div></div>`;
       }
+      async function loadDriver() {
+        go('s-driver');
+        const [feed, assigned] = await Promise.all([api('/orders/feed'), api('/orders/assigned')]);
+        feed.forEach((o) => socket?.emit('order:subscribe', o.id));
+        assigned.forEach((o) => socket?.emit('order:subscribe', o.id));
+        let html = '<div class="muted" style="margin-top:4px;font-weight:700">🔔 Disponibles</div>';
+        html += feed.length ? feed.map(ordCard).join('') : emptyMsg('🕓', 'No hay pedidos disponibles ahora');
+        if (assigned.length) html += '<div class="muted" style="margin-top:16px;font-weight:700">🛵 Mis entregas</div>' + assigned.map(ordCard).join('');
+        $('driver-list').innerHTML = html;
+      }
+      window.loadDriver = loadDriver;
+      function emptyMsg(e, t) { return `<div class="empty"><div class="e">${e}</div>${t}</div>`; }
+      function pretty(s) { return ({ CREADA: 'Creada', PUBLICADA: 'Buscando…', ACEPTADA: 'Aceptada', COMPRANDO: 'Comprando', ESPERA_APROBACION: 'Aprueba recarga', EN_CAMINO: 'En camino', ENTREGADA: 'Entregada', CERRADA: 'Completada', CANCELADA: 'Cancelada', EN_DISPUTA: 'En disputa' }[s] || s); }
 
-      function renderOrder(o) {
-        const btns = me.role === 'CLIENTE' ? clientButtons(o) : driverButtons(o);
+      // ---------- DETALLE ----------
+      let detailMap = null, detailMarker = null, trackTimer = null;
+      async function openDetail(id) {
+        selected = id;
+        go('s-detail', true);
+        socket?.emit('order:subscribe', id);
+        const o = await api(`/orders/${id}`);
         const trip = o.type === 'VIAJE';
-        const icon = trip ? '🏍️' : '🛍️';
-        const body = trip
-          ? `<div class="muted">🟢 ${o.originAddress || 'Origen'} → 🔴 ${o.deliveryAddress} · ${o.distanceKm != null ? o.distanceKm.toFixed(2) + ' km' : ''} · tarifa ${money(o.totals.estimatedTotal)} · 🔒 ${money(o.totals.held)}</div>`
-          : `<div class="muted">📍 ${o.deliveryAddress} · estimado ${money(o.totals.estimatedTotal)}${o.totals.finalTotal!=null?' · final '+money(o.totals.finalTotal):''} · 🔒 ${money(o.totals.held)}</div>
-             <table><thead><tr><th>Producto</th><th>Cant</th><th>Est.</th><th>Real</th><th></th></tr></thead><tbody>${o.items.map((i) => `<tr><td>${i.name}</td><td>${i.qty}</td><td>${money(i.estUnitCents/100)}</td><td>${i.realUnitCents!=null?money(i.realUnitCents/100):'—'}</td><td><span class="chip st ${i.status}">${i.status}</span></td></tr>`).join('')}</tbody></table>`;
-        return `<div class="order ${selected===o.id?'sel':''}" id="ord-${o.id}">
-          <div class="hd" onclick="openDetail('${o.id}')"><b>${icon} #${o.id.slice(-6)}</b> <span class="chip st ${o.status}">${o.status}</span></div>
-          ${body}
-          <div>${btns}</div>
-        </div>`;
-      }
-
-      // ---------- Detalle: chat + mapa en vivo ----------
-      async function openDetail(orderId) {
-        selected = orderId;
-        socket?.emit('order:subscribe', orderId);
-        document.querySelectorAll('.order').forEach((e) => e.classList.remove('sel'));
-        $('ord-' + orderId)?.classList.add('sel');
-        $('detail').classList.remove('hidden');
-        $('detail-title').textContent = 'Orden #' + orderId.slice(-6);
-        const isDriver = me.role === 'CONDUCTOR';
+        const isClient = me.role === 'CLIENTE';
+        const prods = trip ? '' : `<div style="margin-top:8px">${o.items.map((i) => `• ${esc(i.name)} ×${i.qty}`).join('<br>')}</div>`;
         $('detail-body').innerHTML = `
-          <div id="map"></div>
-          ${isDriver ? `<button id="btn-track" class="go">📡 Compartir mi ubicación</button>` : `<div class="muted" style="margin-top:8px">🗺️ Ubicación del repartidor en tiempo real</div>`}
-          <h3 style="margin-top:14px">💬 Chat</h3>
+          <div class="hd" style="display:flex;justify-content:space-between;align-items:center">
+            <h2 class="ttl">${trip ? '🏍️ Viaje' : '🛍️ Pedido'} #${o.id.slice(-5)}</h2>
+            <span class="chip st ${o.status}">${pretty(o.status)}</span>
+          </div>
+          <div class="muted">${trip ? `🟢 ${esc(o.originAddress || '')} → 🔴 ${esc(o.deliveryAddress)}${o.distanceKm ? ' · ' + o.distanceKm.toFixed(2) + ' km' : ''}` : `🏪 ${esc(o.originAddress || 'Comercio')}<br>📍 Entrega: ${esc(o.deliveryAddress)}`}</div>
+          <div class="muted">${trip ? 'Tarifa' : 'Presupuesto'}: <b>${money(o.totals.estimatedTotal)}</b>${o.totals.finalTotal != null ? ' · Final: <b>' + money(o.totals.finalTotal) + '</b>' : ''}${o.totals.held ? ' · 🔒 ' + money(o.totals.held) : ''}</div>
+          ${prods}
+          <div id="detail-actions" style="margin-top:12px"></div>
+          <div id="detail-map" style="margin-top:12px"></div>
+          ${isClient && trip ? '' : ''}
+          <h3 style="margin-top:16px">💬 Chat</h3>
           <div class="chatbox" id="chatbox"></div>
-          <div class="item-row"><input id="chat-input" placeholder="Escribe un mensaje…" style="flex:3"/><button style="flex:0" onclick="sendChat()">Enviar</button></div>`;
-
-        setTimeout(initMap, 50);
-        const msgs = await api(`/orders/${orderId}/messages`);
-        $('chatbox').innerHTML = msgs.map(fmtMsg).join('');
-        const pts = await api(`/orders/${orderId}/tracking`);
-        if (pts.length) setMarker(pts[0].lat, pts[0].lng);
-        if (isDriver) $('btn-track').onclick = toggleTracking;
+          <div class="chatform"><input id="chat-input" placeholder="Escribe un mensaje…"/><button onclick="sendChat()">Enviar</button></div>`;
+        $('detail-actions').innerHTML = actionsFor(o);
+        setTimeout(() => { initDetailMap(); }, 60);
+        const msgs = await api(`/orders/${id}/messages`);
+        renderChat(msgs);
+        const pts = await api(`/orders/${id}/tracking`);
+        if (pts.length) setDetailMarker(pts[0].lat, pts[0].lng);
       }
       window.openDetail = openDetail;
+      $('detail-back').onclick = () => { if (trackTimer) { clearInterval(trackTimer); trackTimer = null; } go(me.role === 'CLIENTE' ? 's-orders' : 's-driver'); if (me.role === 'CLIENTE') loadOrders(); else loadDriver(); };
 
-      function initMap() {
-        if (!$('map')) return;
-        if (map) { map.remove(); map = null; marker = null; }
-        map = L.map('map').setView([10.47, -66.9], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map);
+      function actionsFor(o) {
+        const b = [];
+        if (me.role === 'CLIENTE') {
+          if (o.status === 'ESPERA_APROBACION') b.push(`<button class="go" onclick="act('/orders/${o.id}/approve-extra')">✅ Aprobar recarga de +${money(o.totals.pendingExtra)}</button>`);
+          if (o.status === 'ENTREGADA') b.push(`<button class="go" onclick="act('/orders/${o.id}/confirm-delivery')">🎉 Confirmar y liberar pago</button>`);
+          if (['CREADA', 'PUBLICADA', 'ACEPTADA'].includes(o.status)) b.push(`<button class="danger" onclick="act('/orders/${o.id}/cancel')">Cancelar</button>`);
+        } else {
+          const trip = o.type === 'VIAJE';
+          if (o.status === 'PUBLICADA') b.push(`<button class="go" onclick="act('/orders/${o.id}/accept')">🙋 Aceptar</button>`);
+          if (o.status === 'ACEPTADA' && trip) b.push(`<button onclick="act('/orders/${o.id}/start-trip')">🏍️ Iniciar viaje</button>`);
+          if (o.status === 'ACEPTADA' && !trip) b.push(`<button onclick="act('/orders/${o.id}/start-shopping')">🛒 Empezar compra</button>`);
+          if (o.status === 'COMPRANDO') b.push(`<button class="go" onclick="finishShop('${o.id}')">✔️ Terminar compra (poner total)</button>`);
+          if (o.status === 'EN_CAMINO') b.push(`<button class="go" onclick="act('/orders/${o.id}/deliver')">${trip ? '🏁 Finalizar viaje' : '📦 Entregado'}</button>`);
+          if (['ACEPTADA', 'COMPRANDO', 'EN_CAMINO'].includes(o.status)) b.push(`<button class="sec" id="btn-track" onclick="toggleTrack()">📡 Compartir mi ubicación</button>`);
+        }
+        return b.join(' ');
       }
-      function setMarker(lat, lng) {
-        if (!map) return;
-        if (!marker) marker = L.marker([lat, lng]).addTo(map).bindPopup('🏍️ Repartidor');
-        else marker.setLatLng([lat, lng]);
-        map.setView([lat, lng], 15);
+      async function act(path, body) { try { await api(path, { method: 'POST', body }); openDetail(selected); refreshSaldo(); } catch (e) { alert(e.message); } }
+      window.act = act;
+      async function finishShop(id) {
+        const total = Number(prompt('¿Cuánto fue el total del ticket (solo productos, sin el delivery)?', ''));
+        if (!total || total <= 0) return;
+        await act(`/orders/${id}/finish-shopping`, { finalItemsTotal: total });
       }
+      window.finishShop = finishShop;
 
-      let trackTimer = null;
-      function toggleTracking() {
+      function initDetailMap() {
+        if (!$('detail-map')) return;
+        detailMap = L.map('detail-map').setView([10.47, -66.9], 13); tiles().addTo(detailMap); detailMap.invalidateSize();
+        detailMarker = null;
+      }
+      function setDetailMarker(lat, lng) { if (!detailMap) return; if (!detailMarker) detailMarker = L.marker([lat, lng]).addTo(detailMap).bindPopup('🏍️ Repartidor'); else detailMarker.setLatLng([lat, lng]); detailMap.setView([lat, lng], 15); }
+      function toggleTrack() {
         const btn = $('btn-track');
         if (trackTimer) { clearInterval(trackTimer); trackTimer = null; btn.textContent = '📡 Compartir mi ubicación'; return; }
         btn.textContent = '🛑 Dejar de compartir';
-        // Simulación de movimiento (si no hay GPS): camina hacia el cliente.
         let lat = 10.47 + (Math.random() - 0.5) * 0.02, lng = -66.9 + (Math.random() - 0.5) * 0.02;
-        const send = (la, ln) => { socket?.emit('tracking', { orderId: selected, lat: la, lng: ln }); setMarker(la, ln); };
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition((p) => { lat = p.coords.latitude; lng = p.coords.longitude; send(lat, lng); }, () => send(lat, lng));
-        } else send(lat, lng);
-        trackTimer = setInterval(() => { lat += (Math.random() - 0.4) * 0.001; lng += (Math.random() - 0.4) * 0.001; send(lat, lng); }, 2000);
+        const send = (la, ln) => { socket?.emit('tracking', { orderId: selected, lat: la, lng: ln }); setDetailMarker(la, ln); };
+        if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => { lat = p.coords.latitude; lng = p.coords.longitude; send(lat, lng); }, () => send(lat, lng));
+        else send(lat, lng);
+        trackTimer = setInterval(() => { lat += (Math.random() - 0.4) * 0.001; lng += (Math.random() - 0.4) * 0.001; send(lat, lng); }, 2500);
       }
+      window.toggleTrack = toggleTrack;
 
-      function fmtMsg(m) { return `<div class="msg"><span class="who">${m.fromRole || (m.fromUserId === me.id ? 'Tú' : 'Otro')}:</span> ${escapeHtml(m.text)}</div>`; }
-      function escapeHtml(s) { return (s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
-      window.sendChat = () => { const i = $('chat-input'); if (i.value.trim()) { socket?.emit('chat', { orderId: selected, text: i.value.trim() }); i.value = ''; } };
+      // chat
+      function renderChat(msgs) { const c = $('chatbox'); if (!c) return; c.innerHTML = msgs.map(bubble).join(''); c.scrollTop = 1e9; }
+      function bubble(m) { const mine = m.fromUserId === me.id || m.fromRole === me.role; return `<div class="bubble ${mine ? 'me' : 'them'}">${esc(m.text)}</div>`; }
+      function sendChat() { const i = $('chat-input'); if (i && i.value.trim()) { socket?.emit('chat', { orderId: selected, text: i.value.trim() }); i.value = ''; } }
+      window.sendChat = sendChat;
 
-      // ---------- refresh listas ----------
-      async function refresh() {
-        const bal = await api('/wallet/me');
-        $('b-av').textContent = money(bal.available); $('b-fz').textContent = money(bal.frozen);
-        if (me.role === 'CLIENTE') {
-          const orders = await api('/orders/mine');
-          $('panel-title').textContent = '🛍️ Mis órdenes';
-          $('list').innerHTML = orders.length ? orders.map(renderOrder).join('') : '<p class="muted">Sin órdenes aún.</p>';
-          subscribeAll(orders);
-        } else {
-          const [feed, assigned] = await Promise.all([api('/orders/feed'), api('/orders/assigned')]);
-          $('panel-title').innerHTML = '🏍️ Feed + mis entregas';
-          const feedH = feed.length ? '<div class="muted" style="margin-top:4px">Disponibles:</div>' + feed.map(renderOrder).join('') : '<p class="muted">No hay órdenes en el feed ahora.</p>';
-          const asgH = assigned.length ? '<div class="muted" style="margin-top:10px">En curso (mías):</div>' + assigned.map(renderOrder).join('') : '';
-          $('list').innerHTML = feedH + asgH;
-          subscribeAll(assigned);
-        }
+      // ---------- WALLET ----------
+      let pendingRef = null;
+      async function openWallet() { go('s-wallet'); const b = await api('/wallet/me'); $('w-av').textContent = money(b.available); $('w-fz-line').textContent = b.frozen ? '🔒 Congelado en pedidos: ' + money(b.frozen) : ''; }
+      $('w-fund').onclick = async () => {
+        $('w-err').textContent = '';
+        try { const r = await api('/payments/cash-in', { method: 'POST', body: { amount: Number($('w-amount').value), method: 'PAGO_MOVIL' } }); pendingRef = r.intent.reference; $('pm-ins').textContent = r.instructions.instructions; $('pm-box').classList.remove('hidden'); } catch (e) { $('w-err').textContent = e.message; }
+      };
+      $('pm-confirm').onclick = async () => { try { await api(`/payments/cash-in/${pendingRef}/confirm`, { method: 'POST' }); $('pm-box').classList.add('hidden'); await openWallet(); refreshSaldo(); } catch (e) { $('w-err').textContent = e.message; } };
+      async function cashOut() {
+        const amount = Number($('w-amount').value);
+        const phone = prompt('Tu teléfono de Pago Móvil (ej: 0414-5551234):', '0414-'); if (!phone) return;
+        const bank = prompt('Código de banco (ej: 0102):', '0102'); if (!bank) return;
+        const cedula = prompt('Cédula/RIF (ej: V-12345678):', 'V-'); if (!cedula) return;
+        try { await api('/payments/cash-out', { method: 'POST', body: { amount, bank, phone, cedula } }); await openWallet(); refreshSaldo(); showToast('Retiro enviado 💸', 'info'); } catch (e) { $('w-err').textContent = e.message; }
       }
+      window.cashOut = cashOut;
+      // override go() to load wallet data when entering it
+      const _go = go;
+      go = function (id, k) { _go(id, k); if (id === 's-wallet') openWallet(); };
+      window.go = go;
 
-      // Suscribe el socket a las salas de estas órdenes para recibir cambios en vivo.
-      const subscribed = new Set();
-      function subscribeAll(orders) {
-        (orders || []).forEach((o) => { if (!subscribed.has(o.id)) { subscribed.add(o.id); socket?.emit('order:subscribe', o.id); } });
+      // ---------- toast ----------
+      function showToast(text, kind = 'info') {
+        const colors = { success: 'var(--green)', info: 'var(--blue)', warn: 'var(--accent)' };
+        const el = document.createElement('div');
+        el.style.cssText = `background:#fff;color:var(--ink);border:1px solid var(--line);border-left:4px solid ${colors[kind] || 'var(--blue)'};box-shadow:var(--shadow);border-radius:12px;padding:12px 16px;font-weight:600;animation:slideIn .3s`;
+        el.textContent = text; $('toast').appendChild(el); setTimeout(() => el.remove(), 5000);
       }
+      window.showToast = showToast;
 
       // ---------- sockets ----------
       function connectSocket() {
         socket = io({ auth: { token } });
         socket.on('connect', () => $('live').classList.remove('hidden'));
         socket.on('disconnect', () => $('live').classList.add('hidden'));
-        socket.on('feed:refresh', () => { if (me.role === 'CONDUCTOR') refresh(); });
-        socket.on('order:update', () => { refresh(); });
-        socket.on('chat', (m) => { if (selected && $('chatbox')) { $('chatbox').insertAdjacentHTML('beforeend', fmtMsg(m)); $('chatbox').scrollTop = 1e9; } });
-        socket.on('tracking', (p) => { if (selected) setMarker(p.lat, p.lng); });
-        socket.on('notify', (n) => { showToast(n.text, n.kind); refresh(); });
+        socket.on('feed:refresh', () => { if (me.role === 'CONDUCTOR' && $('s-driver').classList.contains('active')) loadDriver(); });
+        socket.on('order:update', () => { if ($('s-detail').classList.contains('active')) openDetail(selected); else if ($('s-orders').classList.contains('active')) loadOrders(); else if ($('s-driver').classList.contains('active')) loadDriver(); refreshSaldo(); });
+        socket.on('chat', (m) => { if (selected && $('chatbox')) { $('chatbox').insertAdjacentHTML('beforeend', bubble(m)); $('chatbox').scrollTop = 1e9; } });
+        socket.on('tracking', (p) => { if (selected && detailMap) setDetailMarker(p.lat, p.lng); });
+        socket.on('notify', (n) => { showToast(n.text, n.kind); refreshSaldo(); });
       }
 
-      function showSession() {
-        $('auth').classList.add('hidden'); $('session').classList.remove('hidden'); $('panel').classList.remove('hidden');
-        $('s-name').textContent = me.name || me.email; $('s-role').textContent = (me.role === 'CLIENTE' ? '🛍️ ' : '🏍️ ') + me.role;
-        $('cli-new').classList.toggle('hidden', me.role !== 'CLIENTE');
-        $('cli-trip').classList.toggle('hidden', me.role !== 'CLIENTE');
-        if (me.role === 'CLIENTE' && !document.querySelector('.item-row')) { addItemRow('Leche', 2, '1.50'); addItemRow('Pan', 1, '2.00'); }
-        if (me.role === 'CLIENTE') setTimeout(initTripMap, 100);
-      }
-
+      function logout() { location.reload(); }
+      window.logout = logout;
       $('btn-login').onclick = async () => {
-        $('auth-err').textContent = '';
+        $('login-err').textContent = '';
         try {
           const r = await api('/auth/login', { method: 'POST', body: { email: $('email').value, password: $('password').value } });
-          token = r.accessToken; me = r.user; showSession(); connectSocket(); await refresh();
-        } catch (e) { $('auth-err').textContent = e.message; }
+          token = r.accessToken; me = r.user;
+          $('s-login').classList.remove('active'); $('app').classList.remove('hidden');
+          connectSocket(); refreshSaldo();
+          if (me.role === 'CONDUCTOR') loadDriver(); else go('s-home');
+        } catch (e) { $('login-err').textContent = e.message; }
       };
-      // ---------- Pagos (Pago Móvil) ----------
-      let pendingRef = null;
-      $('btn-fund').onclick = async () => {
-        try {
-          const amount = Number($('fund').value);
-          const r = await api('/payments/cash-in', { method: 'POST', body: { amount, method: 'PAGO_MOVIL' } });
-          pendingRef = r.intent.reference;
-          $('pm-instructions').textContent = r.instructions.instructions;
-          $('pm-box').classList.remove('hidden');
-        } catch (e) { alert(e.message); }
-      };
-      $('btn-pm-confirm').onclick = async () => {
-        try {
-          await api(`/payments/cash-in/${pendingRef}/confirm`, { method: 'POST' });
-          $('pm-box').classList.add('hidden'); pendingRef = null;
-          await refresh();
-        } catch (e) { alert(e.message); }
-      };
-      $('btn-cashout').onclick = async () => {
-        const amount = Number($('fund').value);
-        const phone = prompt('Tu teléfono de Pago Móvil (ej: 0414-5551234):', '0414-');
-        if (!phone) return;
-        const bank = prompt('Código de banco (ej: 0102):', '0102');
-        if (!bank) return;
-        const cedula = prompt('Cédula/RIF (ej: V-12345678):', 'V-');
-        if (!cedula) return;
-        try {
-          await api('/payments/cash-out', { method: 'POST', body: { amount, bank, phone, cedula } });
-          await refresh();
-          showToast(`Retiro de ${money(amount)} enviado 💸`, 'info');
-        } catch (e) { alert(e.message); }
-      };
-
-      // ---------- Toast de notificaciones ----------
-      function showToast(text, kind = 'info') {
-        const colors = { success: 'var(--mint)', info: 'var(--sky)', warn: 'var(--coral)' };
-        const el = document.createElement('div');
-        el.style.cssText = `background:var(--panel); color:var(--ink); border:1px solid var(--line); border-left:4px solid ${colors[kind] || 'var(--sky)'}; box-shadow:var(--shadow); border-radius:12px; padding:12px 16px; font-weight:600; max-width:300px; animation:fade .3s; backdrop-filter:blur(10px)`;
-        el.textContent = text;
-        $('toast').appendChild(el);
-        setTimeout(() => el.remove(), 5000);
-      }
-
-      $('btn-logout').onclick = () => location.reload();
     </script>
   </body>
 </html>

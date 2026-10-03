@@ -96,8 +96,12 @@ export class OrdersController {
 
   @Roles(RoleValues.CONDUCTOR)
   @Post(':id/finish-shopping')
-  finishShopping(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.orders.finishShopping(user.id, id);
+  finishShopping(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { finalItemsTotal?: number },
+  ) {
+    return this.orders.finishShopping(user.id, id, body?.finalItemsTotal);
   }
 
   @Roles(RoleValues.CONDUCTOR)

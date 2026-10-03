@@ -78,8 +78,8 @@ export const PLATFORM_COMMISSION_RATE = 0.2;
 export const DEFAULT_DELIVERY_FEE_CENTS = 200;
 
 /** Tarifa de mototaxi: banderazo + costo por kilómetro (en céntimos). */
-export const TRIP_BASE_FARE_CENTS = 150;
-export const TRIP_PER_KM_CENTS = 80;
+export const TRIP_BASE_FARE_CENTS = 100;
+export const TRIP_PER_KM_CENTS = 55;
 
 /** Distancia en km entre dos coordenadas (fórmula de Haversine). */
 export function haversineKm(

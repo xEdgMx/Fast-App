@@ -1,4 +1,12 @@
-import { IsLatitude, IsLongitude, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class CreateTripDto {
   @IsString()
@@ -24,4 +32,10 @@ export class CreateTripDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  /** Distancia real por calles (km), calculada por el mapa (OSRM). Si falta, se usa la línea recta. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @IsPositive()
+  distanceKm?: number;
 }
